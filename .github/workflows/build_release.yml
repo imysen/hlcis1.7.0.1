@@ -9,10 +9,6 @@ jobs:
   build:
     runs-on: windows-latest
 
-    strategy:
-      matrix:
-        arch: [x64, x86, arm64]
-
     steps:
 
       - name: Checkout repository
@@ -38,26 +34,26 @@ jobs:
       - name: Build solution
         run: dotnet build ClassIsland.sln --configuration Release --no-restore
 
-      - name: Publish application
+      - name: Publish x64
         run: |
           dotnet publish ClassIsland/ClassIsland/ClassIsland.csproj `
             -c Release `
-            -r win-${{ matrix.arch }} `
+            -r win-x64 `
             --self-contained true `
             /p:PublishSingleFile=true `
-            -o publish/${{ matrix.arch }}
+            -o publish
 
       - name: Zip build
         run: |
           Compress-Archive `
-            -Path publish/${{ matrix.arch }}/* `
-            -DestinationPath ClassIsland-${{ matrix.arch }}.zip
+            -Path publish/* `
+            -DestinationPath ClassIsland-x64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClassIsland-${{ matrix.arch }}
-          path: ClassIsland-${{ matrix.arch }}.zip
+          name: ClassIsland-x64
+          path: ClassIsland-x64.zip
 
 
   release:
@@ -67,12 +63,12 @@ jobs:
 
     steps:
 
-      - name: Download build artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           tag: build-${{ github.run_number }}

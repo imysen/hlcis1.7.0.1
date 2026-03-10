@@ -153,8 +153,8 @@ public class WeatherService : ObservableRecipient, IHostedService, IWeatherServi
             using var http = new HttpClient();
             var uri = Settings.WeatherLocationSource switch
             {
-                0 => $"https://weatherapi.market.xiaomi.com/wtr-v3/location/city/info?locationKey={Settings.CityId}&locale=zh_cn",
-                1 => $"https://weatherapi.market.xiaomi.com/wtr-v3/location/city/geo?longitude={Settings.WeatherLongitude}&latitude={Settings.WeatherLatitude}&locale=zh_cn",
+                0 => $"https://weather.api.236668.xyz/wtr-v3/location/city/info?locationKey={Settings.CityId}&locale=zh_cn",
+                1 => $"https://weather.api.236668.xyz/wtr-v3/location/city/geo?longitude={Settings.WeatherLongitude}&latitude={Settings.WeatherLatitude}&locale=zh_cn",
                 _ => throw new ArgumentOutOfRangeException()
             };
             Logger.LogInformation("获取城市信息： {}", uri);
@@ -185,7 +185,7 @@ public class WeatherService : ObservableRecipient, IHostedService, IWeatherServi
         {
             using var http = new HttpClient();
             var uri =
-                $"https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude={cityLatitude}&longitude={cityLongitude}&locationKey={Uri.EscapeDataString(Settings.CityId)}&days=15&appKey=weather20151024&sign=zUFJoAR2ZVrDy1vF3D07&isGlobal=false&locale=zh_cn";
+                $"https://weather.api.236668.xyz/wtr-v3/weather/all?latitude={cityLatitude}&longitude={cityLongitude}&locationKey={Uri.EscapeDataString(Settings.CityId)}&days=15&appKey=weather20151024&sign=zUFJoAR2ZVrDy1vF3D07&isGlobal=false&locale=zh_cn";
             Logger.LogInformation("获取天气信息： {}", uri);
             var info = await WebRequestHelper.GetJson<WeatherInfo>(new Uri(uri));
             info.Alerts.RemoveAll(i => Settings.ExcludedWeatherAlerts.FirstOrDefault(x =>
@@ -212,13 +212,13 @@ public class WeatherService : ObservableRecipient, IHostedService, IWeatherServi
 
     public async Task<List<City>> GetCitiesByName(string name)
     {
-        var uri = new Uri("https://weatherapi.market.xiaomi.com/wtr-v3/location/city/hots?locale=zh_cn");
+        var uri = new Uri("https://weather.api.236668.xyz/wtr-v3/location/city/hots?locale=zh_cn");
         var logText = "获取热门城市信息";
 
         if (name != string.Empty)
         {
             uri = new Uri(
-                $"https://weatherapi.market.xiaomi.com/wtr-v3/location/city/search?name={Uri.EscapeDataString(name)}&locale=zh_cn");
+                $"https://weather.api.236668.xyz/wtr-v3/location/city/search?name={Uri.EscapeDataString(name)}&locale=zh_cn");
             logText = logText.Replace("热门", "");
         }
 

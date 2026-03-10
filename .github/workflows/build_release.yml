@@ -1,8 +1,8 @@
-name: Build
+name: Build ClassIsland
 
 on:
   push:
-    branches: [ main ]   # 如果你的默认分支是 master，就改成 master
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -14,28 +14,31 @@ jobs:
         arch: [x64, x86, arm64]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      # 缓存 NuGet，加快构建
-      - name: Cache NuGet
+      - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
 
-      - name: Restore
+      - name: Restore dependencies
         run: dotnet restore ClassIsland.sln
 
-      - name: Build
+      - name: Build solution
         run: dotnet build ClassIsland.sln --configuration Release --no-restore
 
-      - name: Publish
+      - name: Publish application
         run: |
           dotnet publish ClassIsland/ClassIsland/ClassIsland.csproj `
             -c Release `
@@ -46,12 +49,14 @@ jobs:
 
       - name: Zip build
         run: |
-          Compress-Archive -Path publish/${{ matrix.arch }}/* -DestinationPath ClassIsland-${{ matrix.arch }}.zip
+          Compress-Archive `
+            -Path publish/${{ matrix.arch }}/* `
+            -DestinationPath ClassIsland-${{ matrix.arch }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: classisland-${{ matrix.arch }}
+          name: ClassIsland-${{ matrix.arch }}
           path: ClassIsland-${{ matrix.arch }}.zip
 
 
@@ -61,12 +66,13 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
 
     steps:
-      - name: Download artifacts
+
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: build-${{ github.run_number }}

@@ -1,4 +1,4 @@
-name: Build x64 Only
+name: Build Windows x64
 
 on:
   push:
@@ -12,27 +12,21 @@ on:
         type: string
 
 env:
-  # 解决 Node.js 20 警告，强制使用 Node 24
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   GITHUB_NUGET_SOURCE: "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
   DOTNET_VERSION: '8.0.x'
 
 jobs:
-  # ==========================================
-  # 1. 仅构建 x64 程序 (Windows & Linux)
-  # ==========================================
-  build_app:
-    name: Build x64 (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
-    strategy:
-      fail-fast: false  # 即使一个失败，另一个也会继续运行
-      matrix:
-        os: [windows, linux]
+  build_windows:
+    name: Build Windows x64
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # 关键修复：必须递归拉取子模块，否则 vendors 下的项目文件会缺失
           submodules: recursive
+          fetch-depth: 0
           ref: ${{ github.event.inputs.release_tag || github.ref }}
 
       - name: Setup .NET
@@ -40,39 +34,25 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Publish App
-        shell: bash
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Publish Windows App
+        # 强制指定 win-x64，自包含打包
+        run: dotnet publish -c Release -r win-x64 --self-contained true -o ./out/app_windows_x64
+
+      - name: Pack NuGet
+        run: dotnet pack -c Release -o ./out_nupkgs
+
+      - name: Push to GitHub Packages
+        shell: pwsh
         run: |
-          # 确定 RID
-          [ "${{ matrix.os }}" == "windows" ] && RID="win-x64" || RID="linux-x64"
-          
-          # 执行发布 (仅发布 x64)
-          # 注意：如果你的解决方案里有多个项目，建议这里加上具体的 .csproj 路径
-          dotnet publish -c Release -r $RID --self-contained true -o ./out/app_${RID}
+          # 检查是否已经存在同名源，不存在则添加
+          dotnet nuget add source --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "${{ env.GITHUB_NUGET_SOURCE }}"
+          dotnet nuget push "./out_nupkgs/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app_${{ matrix.os }}_x64
-          path: ./out/app_*/*
-
-  # ==========================================
-  # 2. 构建 NuGet 包
-  # ==========================================
-  build_nupkg:
-    name: Build NuGet Packages
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Pack and Push
-        run: |
-          dotnet pack -c Release -o ./out_nupkgs
-          dotnet nuget add source --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "${{ env.GITHUB_NUGET_SOURCE }}"
-          dotnet nuget push "./out_nupkgs/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          name: ClassIsland_Windows_x64
+          path: ./out/app_windows_x64/*

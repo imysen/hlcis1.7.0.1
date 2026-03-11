@@ -24,48 +24,45 @@ jobs:
       - name: Checkout Main Repo
         uses: actions/checkout@v4
         with:
-          # 依然保留子模块尝试，万一以后配置好了呢
+          # 必须包含子模块，fetch-depth: 0 确保所有历史和分支可见
           submodules: recursive
           fetch-depth: 0
           ref: ${{ github.event.inputs.release_tag || github.ref }}
 
-      # 核心修复：使用 Token 鉴权克隆子项目
-      - name: Fix Missing Dependencies (EdgeTtsSharp)
+      # 强制修复子模块映射（针对 vendors 下项目无法找到的问题）
+      - name: Force Update Submodules
         shell: pwsh
         run: |
-          $vendorDir = "vendors/EdgeTtsSharp"
-          if (!(Test-Path "$vendorDir/Edge_tts_sharp/Edge_tts_sharp.csproj")) {
-              echo "子项目文件缺失，正在使用内置 Token 尝试克隆..."
-              # 自动获取当前组织/用户的名称，确保路径通用
-              $owner = "${{ github.repository_owner }}"
-              # 注意：如果 EdgeTtsSharp 在其他用户下，请把 $owner 换成对应的用户名
-              git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$owner/EdgeTtsSharp.git" $vendorDir --recursive
-          } else {
-              echo "子项目文件已存在，跳过克隆。"
-          }
+          git submodule sync --recursive
+          git submodule update --init --recursive --force
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore Dependencies
-        # 增加一次显式的 restore，确保所有项目（包括刚克隆的）都被加载
-        run: dotnet restore ClassIsland.sln
+      - name: Restore and Build
+        shell: pwsh
+        run: |
+          # 检查项目文件是否存在，如果不存在则报错并列出目录结构（方便调试）
+          $projectPath = "vendors/EdgeTtsSharp/Edge_tts_sharp/Edge_tts_sharp.csproj"
+          if (!(Test-Path $projectPath)) {
+              Write-Error "找不到子项目文件: $projectPath"
+              ls -R vendors
+              exit 1
+          }
+          dotnet restore ClassIsland.sln
 
       - name: Publish Windows App
         run: dotnet publish -c Release -r win-x64 --self-contained true -o ./out/app_windows_x64
 
-      - name: Pack NuGet
-        run: dotnet pack -c Release -o ./out_nupkgs
-
-      - name: Push to GitHub Packages
+      - name: Pack and Push NuGet
         shell: pwsh
         run: |
-          # 检查源，避免重复添加报错
-          $sourceName = "github_generic"
-          $sources = dotnet nuget list source
-          if ($sources -notmatch $sourceName) {
+          dotnet pack -c Release -o ./out_nupkgs
+          # 动态处理 NuGet 源
+          $sourceName = "github_ci"
+          if (!(dotnet nuget list source | Select-String $sourceName)) {
               dotnet nuget add source --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name $sourceName "${{ env.GITHUB_NUGET_SOURCE }}"
           }
           dotnet nuget push "./out_nupkgs/*.nupkg" --source $sourceName --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate

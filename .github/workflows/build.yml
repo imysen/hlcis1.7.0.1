@@ -21,13 +21,27 @@ jobs:
     name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Checkout Main Repo
         uses: actions/checkout@v4
         with:
-          # 关键修复：必须递归拉取子模块，否则 vendors 下的项目文件会缺失
+          # 先尝试常规同步
           submodules: recursive
           fetch-depth: 0
           ref: ${{ github.event.inputs.release_tag || github.ref }}
+
+      # 关键步骤：手动修复缺失的子项目
+      - name: Fix Missing Dependencies (EdgeTtsSharp)
+        shell: pwsh
+        run: |
+          $vendorDir = "vendors/EdgeTtsSharp"
+          if (!(Test-Path "$vendorDir/Edge_tts_sharp/Edge_tts_sharp.csproj")) {
+              echo "子项目文件缺失，正在尝试手动克隆..."
+              # 如果该项目在 GitHub 上，请把下面的 URL 换成它的真实地址
+              # 如果它是私有的，或者就在你的组织下，可以尝试：
+              git clone https://github.com/imysen/EdgeTtsSharp.git $vendorDir --recursive
+          } else {
+              echo "子项目文件已存在，跳过克隆。"
+          }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -35,10 +49,9 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore Dependencies
-        run: dotnet restore
+        run: dotnet restore ClassIsland.sln
 
       - name: Publish Windows App
-        # 强制指定 win-x64，自包含打包
         run: dotnet publish -c Release -r win-x64 --self-contained true -o ./out/app_windows_x64
 
       - name: Pack NuGet
@@ -47,8 +60,8 @@ jobs:
       - name: Push to GitHub Packages
         shell: pwsh
         run: |
-          # 检查是否已经存在同名源，不存在则添加
-          dotnet nuget add source --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "${{ env.GITHUB_NUGET_SOURCE }}"
+          # 确保不因源已存在而报错
+          dotnet nuget add source --username ${{ github.repository_owner }} --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "${{ env.GITHUB_NUGET_SOURCE }}" || echo "Source already exists"
           dotnet nuget push "./out_nupkgs/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
       - name: Upload Artifacts
